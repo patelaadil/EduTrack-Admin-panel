@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Search, Plus, Edit2, Trash2, Lock, Check, Video, BarChart2, FileText } from 'lucide-react'
+import { Search, Plus, Trash2, Check, Video, BarChart2, FileText, AlertCircle } from 'lucide-react'
 import { C } from '../constants/theme'
-import { supabase } from '../lib/supabase'
+import { supabase, SUPABASE_ANON_KEY } from '../lib/supabase'
 import { useTeachers, useClasses } from '../hooks/useData'
 import { Card, Avatar, Badge, Chip, Input, Select, Btn, Modal } from '../components/UI'
 
@@ -10,8 +10,12 @@ export default function TeachersPage() {
   const { data: classes } = useClasses()
   const [showAdd, setShowAdd] = useState(false)
   const [saving, setSaving]   = useState(false)
+  const [error, setError]     = useState('')
   const [search, setSearch]   = useState('')
-  const [form, setForm]       = useState({ name: '', email: '', phone: '', class_id: '', can_add_videos: true, can_add_marks: true, can_add_reports: true })
+  const [form, setForm] = useState({
+    name: '', email: '', phone: '', class_id: '',
+    can_add_videos: true, can_add_marks: true, can_add_reports: true
+  })
 
   const filtered = teachers.filter(t =>
     t.profiles?.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -21,26 +25,32 @@ export default function TeachersPage() {
   async function handleAddTeacher() {
     if (!form.name || !form.email) return
     setSaving(true)
-    const profileId = crypto.randomUUID()
-    const { error: profErr } = await supabase.from('profiles').insert({
-      id: profileId, role: 'teacher', name: form.name,
-      email: form.email, phone: form.phone, is_active: true
-    })
-    if (!profErr) {
-      const { data: teacher } = await supabase.from('teachers').insert({
-        profile_id: profileId,
+    setError('')
+
+    const { data, error: fnError } = await supabase.functions.invoke('create-user', {
+      body: {
+        email: form.email,
+        password: 'EduTrack@123',
+        role: 'teacher',
+        name: form.name,
+        phone: form.phone,
+        class_id: form.class_id || null,
         can_add_videos: form.can_add_videos,
         can_add_marks: form.can_add_marks,
         can_add_reports: form.can_add_reports,
-      }).select().single()
+      },
+      headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
+    })
 
-      if (teacher && form.class_id) {
-        await supabase.from('teacher_classes').insert({ teacher_id: teacher.id, class_id: form.class_id })
-      }
-      refetch()
-      setShowAdd(false)
-      setForm({ name: '', email: '', phone: '', class_id: '', can_add_videos: true, can_add_marks: true, can_add_reports: true })
+    if (fnError || data?.error) {
+      setError(data?.error || fnError?.message || 'Failed to create teacher')
+      setSaving(false)
+      return
     }
+
+    refetch()
+    setShowAdd(false)
+    setForm({ name: '', email: '', phone: '', class_id: '', can_add_videos: true, can_add_marks: true, can_add_reports: true })
     setSaving(false)
   }
 
@@ -52,28 +62,47 @@ export default function TeachersPage() {
 
   return (
     <div>
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add New Teacher">
+      <Modal open={showAdd} onClose={() => { setShowAdd(false); setError('') }} title="Add New Teacher">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Input label="Full Name" placeholder="Teacher name" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
-            <Input label="Email" type="email" placeholder="email@school.edu" value={form.email} onChange={e => setForm({...form, email: e.target.value})} />
+            <Input label="Full Name" placeholder="Teacher name" value={form.name}
+              onChange={e => setForm({...form, name: e.target.value})} />
+            <Input label="Email" type="email" placeholder="email@school.edu" value={form.email}
+              onChange={e => setForm({...form, email: e.target.value})} />
           </div>
-          <Input label="Phone Number" placeholder="+91 XXXXX XXXXX" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} />
-          <Select label="Assign Class" value={form.class_id} onChange={e => setForm({...form, class_id: e.target.value})}
+          <Input label="Phone Number" placeholder="+91 XXXXX XXXXX" value={form.phone}
+            onChange={e => setForm({...form, phone: e.target.value})} />
+          <Select label="Assign Class" value={form.class_id}
+            onChange={e => setForm({...form, class_id: e.target.value})}
             options={[{ value: '', label: 'Select class...' }, ...classes.map(c => ({ value: c.id, label: c.name }))]} />
           <div>
             <label style={{ fontSize: 13, fontWeight: 600, color: C.textGray, display: 'block', marginBottom: 10 }}>Permissions</label>
             <div style={{ display: 'flex', gap: 16 }}>
               {[['can_add_videos','Can Add Videos'], ['can_add_marks','Can Add Marks'], ['can_add_reports','Can Add Reports']].map(([key, label]) => (
                 <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.textDark, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={form[key]} onChange={e => setForm({...form, [key]: e.target.checked})} style={{ accentColor: C.primary }} /> {label}
+                  <input type="checkbox" checked={form[key]}
+                    onChange={e => setForm({...form, [key]: e.target.checked})}
+                    style={{ accentColor: C.primary }} /> {label}
                 </label>
               ))}
             </div>
           </div>
+          <div style={{ padding: '10px 14px', background: `${C.primary}08`, border: `1px dashed ${C.primary}40`, borderRadius: 10 }}>
+            <p style={{ fontSize: 12, color: C.primary, margin: 0, fontWeight: 500 }}>
+              🔑 Default password: <strong>EduTrack@123</strong>
+            </p>
+          </div>
+          {error && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: `${C.error}10`, border: `1px solid ${C.error}30`, borderRadius: 9 }}>
+              <AlertCircle size={14} color={C.error} />
+              <span style={{ fontSize: 13, color: C.error }}>{error}</span>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-            <Btn variant="primary" style={{ flex: 1 }} icon={Check} onClick={handleAddTeacher} disabled={saving}>{saving ? 'Saving...' : 'Save Teacher'}</Btn>
-            <Btn variant="outline" onClick={() => setShowAdd(false)}>Cancel</Btn>
+            <Btn variant="primary" style={{ flex: 1 }} icon={Check} onClick={handleAddTeacher} disabled={saving}>
+              {saving ? 'Creating...' : 'Save Teacher'}
+            </Btn>
+            <Btn variant="outline" onClick={() => { setShowAdd(false); setError('') }}>Cancel</Btn>
           </div>
         </div>
       </Modal>
@@ -83,7 +112,8 @@ export default function TeachersPage() {
           <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: C.textDark }}>Teachers</h2>
           <Badge label={`${teachers.length} total`} color={C.purple} />
           <div style={{ flex: 1 }} />
-          <Input placeholder="Search teachers..." icon={Search} value={search} onChange={e => setSearch(e.target.value)} style={{ width: 220 }} />
+          <Input placeholder="Search teachers..." icon={Search} value={search}
+            onChange={e => setSearch(e.target.value)} style={{ width: 220 }} />
           <Btn icon={Plus} variant="primary" onClick={() => setShowAdd(true)}>Add Teacher</Btn>
         </div>
       </Card>
@@ -125,11 +155,15 @@ export default function TeachersPage() {
                       <FileText size={13} color={t.can_add_reports ? C.success : C.border} />
                     </div>
                   </td>
-                  <td style={{ padding: '12px 16px' }}><Badge label={t.profiles?.is_active ? 'Active' : 'Inactive'} color={t.profiles?.is_active ? C.success : C.textGray} /></td>
                   <td style={{ padding: '12px 16px' }}>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button onClick={() => handleDelete(t.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.error, padding: 4 }}><Trash2 size={14} /></button>
-                    </div>
+                    <Badge label={t.profiles?.is_active ? 'Active' : 'Inactive'}
+                      color={t.profiles?.is_active ? C.success : C.textGray} />
+                  </td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <button onClick={() => handleDelete(t.id)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.error, padding: 4 }}>
+                      <Trash2 size={14} />
+                    </button>
                   </td>
                 </tr>
               ))}

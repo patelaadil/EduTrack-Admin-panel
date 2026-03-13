@@ -1,19 +1,20 @@
 import { useState } from 'react'
-import { Search, Plus, Eye, Edit2, Trash2, Download, Upload, Check, QrCode, Loader } from 'lucide-react'
+import { Search, Plus, Eye, Trash2, Check, QrCode, AlertCircle } from 'lucide-react'
 import { C } from '../constants/theme'
-import { supabase } from '../lib/supabase'
+import { supabase, SUPABASE_ANON_KEY } from '../lib/supabase'
 import { useStudents, useClasses } from '../hooks/useData'
 import { Card, Avatar, Badge, Chip, Input, Select, Btn, Modal } from '../components/UI'
 
 export default function StudentsPage() {
   const { data: students, loading, refetch } = useStudents()
   const { data: classes }                    = useClasses()
-  const [search, setSearch]       = useState('')
+  const [search, setSearch]           = useState('')
   const [classFilter, setClassFilter] = useState('all')
-  const [showAdd, setShowAdd]     = useState(false)
+  const [showAdd, setShowAdd]         = useState(false)
   const [viewStudent, setViewStudent] = useState(null)
-  const [saving, setSaving]       = useState(false)
-  const [form, setForm]           = useState({ name: '', roll_number: '', dob: '', class_id: '', phone: '' })
+  const [saving, setSaving]           = useState(false)
+  const [error, setError]             = useState('')
+  const [form, setForm] = useState({ name: '', roll_number: '', dob: '', class_id: '', phone: '' })
 
   const filtered = students.filter(s => {
     const name = s.profiles?.name?.toLowerCase() || ''
@@ -26,36 +27,43 @@ export default function StudentsPage() {
   async function handleAddStudent() {
     if (!form.name || !form.roll_number) return
     setSaving(true)
-    // 1. Create auth user (default password = DOB or roll number)
-    const defaultPassword = form.dob || form.roll_number
-    const email = `${form.roll_number.toLowerCase()}@student.school.edu`
+    setError('')
 
-    const { data: authData, error: authErr } = await supabase.auth.admin
-      ? { data: null, error: { message: 'Use service role for auth creation' } }
-      : { data: null, error: null }
+    const email    = `${form.roll_number.toLowerCase().replace(/\s+/g, '')}@student.school.edu`
+    const password = form.dob ? form.dob.replace(/-/g, '') : form.roll_number
 
-    // For now insert profile + student directly (admin creates via service role in production)
-    // This simplified flow works when called from a trusted context
-    const profileId = crypto.randomUUID()
+    // Get active academic year
+    const { data: activeYear } = await supabase
+      .from('academic_years')
+      .select('id')
+      .eq('is_active', true)
+      .single()
 
-    const { error: profErr } = await supabase.from('profiles').insert({
-      id: profileId, role: 'student', name: form.name,
-      phone: form.phone, is_active: true
-    })
-
-    if (!profErr) {
-      const activeYear = await supabase.from('academic_years').select('id').eq('is_active', true).single()
-      await supabase.from('students').insert({
-        profile_id: profileId,
+    // Single call to Edge Function — does everything with service role
+    const { data, error: fnError } = await supabase.functions.invoke('create-user', {
+      body: {
+        email,
+        password,
+        role: 'student',
+        name: form.name,
+        phone: form.phone,
         roll_number: form.roll_number,
         class_id: form.class_id || null,
         dob: form.dob || null,
-        academic_year_id: activeYear.data?.id || null,
-      })
-      refetch()
-      setShowAdd(false)
-      setForm({ name: '', roll_number: '', dob: '', class_id: '', phone: '' })
+        academic_year_id: activeYear?.id || null,
+      },
+      headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
+    })
+
+    if (fnError || data?.error) {
+      setError(data?.error || fnError?.message || 'Failed to create student')
+      setSaving(false)
+      return
     }
+
+    refetch()
+    setShowAdd(false)
+    setForm({ name: '', roll_number: '', dob: '', class_id: '', phone: '' })
     setSaving(false)
   }
 
@@ -68,27 +76,42 @@ export default function StudentsPage() {
   return (
     <div>
       {/* Add Modal */}
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add New Student">
+      <Modal open={showAdd} onClose={() => { setShowAdd(false); setError('') }} title="Add New Student">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Input label="Full Name" placeholder="Student name" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
-            <Input label="Roll Number" placeholder="e.g. ST042" value={form.roll_number} onChange={e => setForm({...form, roll_number: e.target.value})} />
+            <Input label="Full Name" placeholder="Student name" value={form.name}
+              onChange={e => setForm({...form, name: e.target.value})} />
+            <Input label="Roll Number" placeholder="e.g. ST042" value={form.roll_number}
+              onChange={e => setForm({...form, roll_number: e.target.value})} />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Input label="Date of Birth" type="date" value={form.dob} onChange={e => setForm({...form, dob: e.target.value})} />
-            <Select label="Class" value={form.class_id} onChange={e => setForm({...form, class_id: e.target.value})}
+            <Input label="Date of Birth" type="date" value={form.dob}
+              onChange={e => setForm({...form, dob: e.target.value})} />
+            <Select label="Class" value={form.class_id}
+              onChange={e => setForm({...form, class_id: e.target.value})}
               options={[{ value: '', label: 'Select class...' }, ...classes.map(c => ({ value: c.id, label: c.name }))]} />
           </div>
-          <Input label="Contact Number" placeholder="+91 XXXXX XXXXX" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} />
+          <Input label="Contact Number" placeholder="+91 XXXXX XXXXX" value={form.phone}
+            onChange={e => setForm({...form, phone: e.target.value})} />
           <div style={{ padding: '12px 16px', background: `${C.primary}08`, border: `1px dashed ${C.primary}40`, borderRadius: 10 }}>
-            <p style={{ fontSize: 12, color: C.primary, margin: 0, fontWeight: 500 }}>🔑 UUID auto-generated on save</p>
-            <p style={{ fontSize: 12, color: C.primary, margin: '4px 0 0', fontWeight: 500 }}>📱 QR Code auto-generated on save</p>
+            <p style={{ fontSize: 12, color: C.primary, margin: 0, fontWeight: 500 }}>
+              📧 Login: <strong>{form.roll_number ? `${form.roll_number.toLowerCase()}@student.school.edu` : 'roll@student.school.edu'}</strong>
+            </p>
+            <p style={{ fontSize: 12, color: C.primary, margin: '4px 0 0', fontWeight: 500 }}>
+              🔑 Password: <strong>{form.dob ? form.dob.replace(/-/g, '') : form.roll_number || 'YYYYMMDD or roll number'}</strong>
+            </p>
           </div>
+          {error && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: `${C.error}10`, border: `1px solid ${C.error}30`, borderRadius: 9 }}>
+              <AlertCircle size={14} color={C.error} />
+              <span style={{ fontSize: 13, color: C.error }}>{error}</span>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-            <Btn variant="primary" style={{ flex: 1 }} icon={saving ? Loader : Check} onClick={handleAddStudent} disabled={saving}>
-              {saving ? 'Saving...' : 'Save Student'}
+            <Btn variant="primary" style={{ flex: 1 }} icon={Check} onClick={handleAddStudent} disabled={saving}>
+              {saving ? 'Creating...' : 'Save Student'}
             </Btn>
-            <Btn variant="outline" onClick={() => setShowAdd(false)}>Cancel</Btn>
+            <Btn variant="outline" onClick={() => { setShowAdd(false); setError('') }}>Cancel</Btn>
           </div>
         </div>
       </Modal>
@@ -102,7 +125,8 @@ export default function StudentsPage() {
               <div>
                 <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: C.textDark }}>{viewStudent.profiles?.name}</h3>
                 <p style={{ margin: '4px 0 0', fontSize: 13, color: C.textGray }}>{viewStudent.classes?.name} · Roll {viewStudent.roll_number}</p>
-                <Badge label={viewStudent.profiles?.is_active ? 'Active' : 'Inactive'} color={viewStudent.profiles?.is_active ? C.success : C.textGray} />
+                <Badge label={viewStudent.profiles?.is_active ? 'Active' : 'Inactive'}
+                  color={viewStudent.profiles?.is_active ? C.success : C.textGray} />
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -119,9 +143,7 @@ export default function StudentsPage() {
                 <div style={{ fontSize: 11, fontWeight: 600, color: C.primary }}>UUID: {viewStudent.uuid}</div>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Btn variant="danger" icon={Trash2} onClick={() => { handleDelete(viewStudent.uuid); setViewStudent(null) }}>Delete</Btn>
-            </div>
+            <Btn variant="danger" icon={Trash2} onClick={() => { handleDelete(viewStudent.uuid); setViewStudent(null) }}>Delete</Btn>
           </div>
         )}
       </Modal>
@@ -132,7 +154,8 @@ export default function StudentsPage() {
           <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: C.textDark }}>Students</h2>
           <Badge label={`${students.length} total`} color={C.primary} />
           <div style={{ flex: 1 }} />
-          <Input placeholder="Search name or roll..." icon={Search} value={search} onChange={e => setSearch(e.target.value)} style={{ width: 220 }} />
+          <Input placeholder="Search name or roll..." icon={Search} value={search}
+            onChange={e => setSearch(e.target.value)} style={{ width: 220 }} />
           <select value={classFilter} onChange={e => setClassFilter(e.target.value)}
             style={{ padding: '7px 10px', border: `1.5px solid ${C.border}`, borderRadius: 9, fontSize: 13, color: C.textDark, background: '#F8FAFC', outline: 'none', fontFamily: 'inherit' }}>
             <option value="all">All Classes</option>
@@ -170,7 +193,10 @@ export default function StudentsPage() {
                   <td style={{ padding: '12px 16px' }}><Chip label={s.classes?.name || '—'} /></td>
                   <td style={{ padding: '12px 16px', fontSize: 13, color: C.textGray }}>{s.dob || '—'}</td>
                   <td style={{ padding: '12px 16px', fontSize: 13, color: C.textGray }}>{s.profiles?.phone || '—'}</td>
-                  <td style={{ padding: '12px 16px' }}><Badge label={s.profiles?.is_active ? 'Active' : 'Inactive'} color={s.profiles?.is_active ? C.success : C.textGray} /></td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <Badge label={s.profiles?.is_active ? 'Active' : 'Inactive'}
+                      color={s.profiles?.is_active ? C.success : C.textGray} />
+                  </td>
                   <td style={{ padding: '12px 16px' }} onClick={e => e.stopPropagation()}>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button onClick={() => setViewStudent(s)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.primary, padding: 4 }}><Eye size={14} /></button>
