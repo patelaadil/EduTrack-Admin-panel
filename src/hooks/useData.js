@@ -20,26 +20,28 @@ export function useSupabase(table, options = {}) {
   }
 
   useEffect(() => { fetch() }, [table])
-
   return { data, loading, error, refetch: fetch }
 }
 
 // ─── STUDENTS ────────────────────────────────────────────────
+// NOTE: students table has TWO fkeys to profiles (profile_id + registered_by)
+// Must use !fkey syntax to disambiguate, otherwise Supabase returns null silently
 export function useStudents() {
   const [data, setData]       = useState([])
   const [loading, setLoading] = useState(true)
 
   async function fetch() {
     setLoading(true)
-    const { data: rows } = await supabase
+    const { data: rows, error } = await supabase
       .from('students')
       .select(`
         uuid, roll_number, dob, qr_code_url,
-        profiles ( id, name, photo_url, phone, email, is_active ),
+        profiles:profile_id ( id, name, photo_url, phone, email, is_active ),
         classes  ( id, name, department ),
         academic_years ( name )
       `)
       .order('created_at', { ascending: false })
+    if (error) console.error('useStudents error:', error.message)
     setData(rows || [])
     setLoading(false)
   }
@@ -55,7 +57,7 @@ export function useTeachers() {
 
   async function fetch() {
     setLoading(true)
-    const { data: rows } = await supabase
+    const { data: rows, error } = await supabase
       .from('teachers')
       .select(`
         id, can_add_videos, can_add_marks, can_add_reports,
@@ -63,6 +65,7 @@ export function useTeachers() {
         teacher_classes ( subject, classes ( id, name ) )
       `)
       .order('created_at', { ascending: false })
+    if (error) console.error('useTeachers error:', error.message)
     setData(rows || [])
     setLoading(false)
   }
@@ -78,7 +81,7 @@ export function useClasses() {
 
   async function fetch() {
     setLoading(true)
-    const { data: rows } = await supabase
+    const { data: rows, error } = await supabase
       .from('classes')
       .select(`
         id, name, department, year,
@@ -86,6 +89,7 @@ export function useClasses() {
         teacher_classes ( teachers ( profiles ( name ) ) )
       `)
       .order('name')
+    if (error) console.error('useClasses error:', error.message)
     setData(rows || [])
     setLoading(false)
   }
@@ -101,7 +105,7 @@ export function useAttendance() {
 
   async function fetch() {
     setLoading(true)
-    const { data: rows } = await supabase
+    const { data: rows, error } = await supabase
       .from('attendance_sessions')
       .select(`
         id, session_date, subject, start_time,
@@ -111,6 +115,7 @@ export function useAttendance() {
       `)
       .order('session_date', { ascending: false })
       .limit(50)
+    if (error) console.error('useAttendance error:', error.message)
     setData(rows || [])
     setLoading(false)
   }
@@ -126,15 +131,16 @@ export function useMarks() {
 
   async function fetch() {
     setLoading(true)
-    const { data: rows } = await supabase
+    const { data: rows, error } = await supabase
       .from('marks')
       .select(`
         id, subject, exam_type, marks_obtained, total_marks, percentage, grade,
-        students ( uuid, roll_number, profiles ( name ) ),
+        students ( uuid, roll_number, profiles:profile_id ( name ) ),
         classes  ( name ),
         teachers ( profiles ( name ) )
       `)
       .order('created_at', { ascending: false })
+    if (error) console.error('useMarks error:', error.message)
     setData(rows || [])
     setLoading(false)
   }
@@ -150,15 +156,16 @@ export function useReports() {
 
   async function fetch() {
     setLoading(true)
-    const { data: rows } = await supabase
+    const { data: rows, error } = await supabase
       .from('reports')
       .select(`
         id, title, file_url, created_at,
-        students ( profiles ( name ) ),
+        students ( profiles:profile_id ( name ) ),
         classes  ( name ),
         teachers ( profiles ( name ) )
       `)
       .order('created_at', { ascending: false })
+    if (error) console.error('useReports error:', error.message)
     setData(rows || [])
     setLoading(false)
   }
@@ -174,7 +181,7 @@ export function useVideos() {
 
   async function fetch() {
     setLoading(true)
-    const { data: rows } = await supabase
+    const { data: rows, error } = await supabase
       .from('videos')
       .select(`
         id, title, description, video_url, thumbnail_url, subject, created_at,
@@ -182,6 +189,7 @@ export function useVideos() {
         teachers ( profiles ( name ) )
       `)
       .order('created_at', { ascending: false })
+    if (error) console.error('useVideos error:', error.message)
     setData(rows || [])
     setLoading(false)
   }
@@ -197,7 +205,7 @@ export function useNotifications() {
 
   async function fetch() {
     setLoading(true)
-    const { data: rows } = await supabase
+    const { data: rows, error } = await supabase
       .from('notifications')
       .select(`
         id, title, body, target_type, created_at,
@@ -205,6 +213,7 @@ export function useNotifications() {
         notification_targets ( is_read )
       `)
       .order('created_at', { ascending: false })
+    if (error) console.error('useNotifications error:', error.message)
     setData(rows || [])
     setLoading(false)
   }
@@ -220,10 +229,11 @@ export function useSliders() {
 
   async function fetch() {
     setLoading(true)
-    const { data: rows } = await supabase
+    const { data: rows, error } = await supabase
       .from('sliders')
       .select('*')
       .order('order_index')
+    if (error) console.error('useSliders error:', error.message)
     setData(rows || [])
     setLoading(false)
   }
@@ -239,10 +249,11 @@ export function useSettings() {
 
   async function fetch() {
     setLoading(true)
-    const { data: row } = await supabase
+    const { data: row, error } = await supabase
       .from('settings')
       .select('*')
       .single()
+    if (error) console.error('useSettings error:', error.message)
     setData(row)
     setLoading(false)
   }
@@ -258,10 +269,11 @@ export function useAppInfo() {
 
   async function fetch() {
     setLoading(true)
-    const { data: row } = await supabase
+    const { data: row, error } = await supabase
       .from('app_info')
       .select('*')
       .single()
+    if (error) console.error('useAppInfo error:', error.message)
     setData(row)
     setLoading(false)
   }
@@ -278,7 +290,6 @@ export function useDashboardStats() {
   useEffect(() => {
     async function fetch() {
       const today = new Date().toISOString().split('T')[0]
-
       const [
         { count: students },
         { count: teachers },
@@ -293,7 +304,6 @@ export function useDashboardStats() {
           .eq('session_date', today),
       ])
 
-      // Calculate today's attendance %
       let present = 0, total = 0
       todaySessions?.forEach(s => {
         s.attendance_records?.forEach(r => {
@@ -323,15 +333,16 @@ export function useRecentRegistrations() {
 
   useEffect(() => {
     async function fetch() {
-      const { data: rows } = await supabase
+      const { data: rows, error } = await supabase
         .from('students')
         .select(`
           uuid, roll_number, created_at,
-          profiles ( name ),
+          profiles:profile_id ( name ),
           classes  ( name )
         `)
         .order('created_at', { ascending: false })
         .limit(5)
+      if (error) console.error('useRecentRegistrations error:', error.message)
       setData(rows || [])
       setLoading(false)
     }
