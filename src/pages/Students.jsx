@@ -63,8 +63,15 @@ export default function StudentsPage() {
 
     refetch()
     setShowAdd(false)
-    setForm({ name: '', roll_number: '', dob: '', class_id: '', phone: '' })
     setSaving(false)
+    
+    // Automatically open the view modal to show the QR code
+    const { data: newStudent } = await supabase.from('students').select('*, profiles(*), classes(*)').eq('roll_number', form.roll_number).maybeSingle()
+    if (newStudent) {
+      setViewStudent(newStudent)
+    }
+
+    setForm({ name: '', roll_number: '', dob: '', class_id: '', phone: '' })
   }
 
   async function handleDelete(uuid) {

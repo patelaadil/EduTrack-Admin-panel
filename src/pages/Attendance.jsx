@@ -158,7 +158,7 @@ export default function AttendancePage() {
           ? <div style={{ padding: 40, textAlign: 'center', color: C.textGray }}>Loading attendance records...</div>
           : filtered.length === 0
             ? <div style={{ padding: 40, textAlign: 'center', color: C.textGray }}>
-                No attendance sessions found. Teachers mark attendance via the Scanner App.
+                No attendance sessions found. Teachers mark attendance via the Teacher App.
               </div>
             : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
