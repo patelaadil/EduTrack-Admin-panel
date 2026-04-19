@@ -17,6 +17,7 @@ import SlidersPage      from './pages/Sliders'
 import NotificationsPage from './pages/Notifications'
 import AppInfoPage      from './pages/AppInfo'
 import SettingsPage     from './pages/Settings'
+import HolidaysPage     from './pages/Holidays'
 
 const pages = {
   dashboard:     { title: 'Dashboard',         component: Dashboard },
@@ -24,18 +25,25 @@ const pages = {
   teachers:      { title: 'Teachers',          component: TeachersPage },
   classes:       { title: 'Classes / Batches', component: ClassesPage },
   attendance:    { title: 'Attendance',        component: AttendancePage },
-  marks:         { title: 'Marks & Reports',   component: MarksPage },
+  marks:         { title: 'Marks',             component: MarksPage },
   videos:        { title: 'Videos',            component: VideosPage },
   sliders:       { title: 'Slider Management', component: SlidersPage },
   notifications: { title: 'Notifications',     component: NotificationsPage },
   appinfo:       { title: 'App Info',          component: AppInfoPage },
   settings:      { title: 'Settings',          component: SettingsPage },
+  holidays:      { title: 'Holiday Management', component: HolidaysPage },
 }
 
 function AdminApp() {
   const { user, profile, loading, signOut } = useAuth()
   const [activePage, setActivePage] = useState('dashboard')
   const [collapsed, setCollapsed]   = useState(false)
+
+  useEffect(() => {
+    if (!loading && user && profile && profile.role !== 'admin') {
+      signOut()
+    }
+  }, [loading, profile, signOut, user])
 
   useEffect(() => {
     const link = document.createElement('link')
@@ -58,7 +66,7 @@ function AdminApp() {
     </div>
   )
 
-  if (!user) return <LoginPage onLogin={() => {}} />
+  if (!user || !profile || profile.role !== 'admin') return <LoginPage onLogin={() => {}} />
 
   const { title, component: PageComponent } = pages[activePage]
   const sidebarWidth = collapsed ? 64 : 240

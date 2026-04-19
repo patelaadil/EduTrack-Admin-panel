@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Search, Plus, Eye, Trash2, Check, QrCode, AlertCircle } from 'lucide-react'
+import { Search, Plus, Eye, Edit2, Trash2, Check, QrCode, AlertCircle } from 'lucide-react'
 import { C } from '../constants/theme'
 import { supabase, SUPABASE_ANON_KEY } from '../lib/supabase'
 import { useStudents, useClasses } from '../hooks/useData'
 import { Card, Avatar, Badge, Chip, Input, Select, Btn, Modal } from '../components/UI'
+import QRCode from 'react-qr-code'
 
 export default function StudentsPage() {
   const { data: students, loading, refetch } = useStudents()
@@ -12,6 +13,7 @@ export default function StudentsPage() {
   const [classFilter, setClassFilter] = useState('all')
   const [showAdd, setShowAdd]         = useState(false)
   const [viewStudent, setViewStudent] = useState(null)
+  const [editStudent, setEditStudent] = useState(null)
   const [saving, setSaving]           = useState(false)
   const [error, setError]             = useState('')
   const [form, setForm] = useState({ name: '', roll_number: '', dob: '', class_id: '', phone: '' })
@@ -73,6 +75,65 @@ export default function StudentsPage() {
 
     setForm({ name: '', roll_number: '', dob: '', class_id: '', phone: '' })
   }
+
+  async function handleUpdateStudent() {
+    if (!editStudent.profiles?.name || !editStudent.roll_number) return
+    setSaving(true)
+    setError('')
+
+    // Update students table
+    const { error: sErr } = await supabase.from('students').update({
+      roll_number: editStudent.roll_number,
+      dob: editStudent.dob || null,
+      class_id: editStudent.class_id || null,
+    }).eq('uuid', editStudent.uuid)
+
+    if (sErr) {
+      setError(sErr.message)
+      setSaving(false)
+      return
+    }
+
+    // Update profiles table
+    if (editStudent.profiles?.id) {
+      const { error: pErr } = await supabase.from('profiles').update({
+        name: editStudent.profiles.name,
+        phone: editStudent.profiles.phone || null,
+      }).eq('id', editStudent.profiles.id)
+
+      if (pErr) {
+        setError(pErr.message)
+        setSaving(false)
+        return
+      }
+    }
+
+    refetch()
+    setEditStudent(null)
+    setSaving(false)
+  }
+
+  const exportQr = (student) => {
+    const svg = document.getElementById("qr-canvas");
+    if (!svg) return;
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = img.width + 40;
+      canvas.height = img.height + 40;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 20, 20);
+      const pngFile = canvas.toDataURL("image/png");
+      const downloadLink = document.createElement("a");
+      downloadLink.download = `QR_${student.roll_number}.png`;
+      downloadLink.href = pngFile;
+      downloadLink.click();
+    };
+    img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgData)));
+  };
 
   async function handleDelete(uuid) {
     if (!window.confirm('Delete this student?')) return
@@ -145,12 +206,50 @@ export default function StudentsPage() {
                 <div style={{ fontSize: 11, color: C.textGray, marginBottom: 3 }}>Contact</div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.textDark }}>{viewStudent.profiles?.phone || '—'}</div>
               </div>
-              <div style={{ padding: '12px 14px', background: `${C.primary}08`, borderRadius: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, gridColumn: 'span 2' }}>
-                <QrCode size={28} color={C.primary} />
+              <div style={{ padding: '20px', background: `${C.primary}08`, borderRadius: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, gridColumn: 'span 2' }}>
+                <div style={{ background: '#fff', padding: 10, borderRadius: 8 }}>
+                  <QRCode id="qr-canvas" value={viewStudent.uuid} size={110} level="Q" />
+                </div>
                 <div style={{ fontSize: 11, fontWeight: 600, color: C.primary }}>UUID: {viewStudent.uuid}</div>
+                <Btn variant="primary" onClick={() => exportQr(viewStudent)} style={{ padding: '6px 16px', fontSize: 13, minHeight: 0 }}>Export PNG</Btn>
               </div>
             </div>
             <Btn variant="danger" icon={Trash2} onClick={() => { handleDelete(viewStudent.uuid); setViewStudent(null) }}>Delete</Btn>
+          </div>
+        )}
+      </Modal>
+
+      {/* Edit Modal */}
+      <Modal open={!!editStudent} onClose={() => { setEditStudent(null); setError('') }} title="Edit Student">
+        {editStudent && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <Input label="Full Name" placeholder="Student name" value={editStudent.profiles?.name || ''}
+                onChange={e => setEditStudent({...editStudent, profiles: {...editStudent.profiles, name: e.target.value}})} />
+              <Input label="Roll Number" placeholder="e.g. ST042" value={editStudent.roll_number}
+                onChange={e => setEditStudent({...editStudent, roll_number: e.target.value})} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <Input label="Date of Birth" type="date" value={editStudent.dob || ''}
+                onChange={e => setEditStudent({...editStudent, dob: e.target.value})} />
+              <Select label="Class" value={editStudent.class_id || ''}
+                onChange={e => setEditStudent({...editStudent, class_id: e.target.value})}
+                options={[{ value: '', label: 'Select class...' }, ...classes.map(c => ({ value: c.id, label: c.name }))]} />
+            </div>
+            <Input label="Contact Number" placeholder="+91 XXXXX XXXXX" value={editStudent.profiles?.phone || ''}
+              onChange={e => setEditStudent({...editStudent, profiles: {...editStudent.profiles, phone: e.target.value}})} />
+            {error && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: `${C.error}10`, border: `1px solid ${C.error}30`, borderRadius: 9 }}>
+                <AlertCircle size={14} color={C.error} />
+                <span style={{ fontSize: 13, color: C.error }}>{error}</span>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+              <Btn variant="primary" style={{ flex: 1 }} icon={Check} onClick={handleUpdateStudent} disabled={saving}>
+                {saving ? 'Saving...' : 'Update Student'}
+              </Btn>
+              <Btn variant="outline" onClick={() => { setEditStudent(null); setError('') }}>Cancel</Btn>
+            </div>
           </div>
         )}
       </Modal>
@@ -207,6 +306,7 @@ export default function StudentsPage() {
                   <td style={{ padding: '12px 16px' }} onClick={e => e.stopPropagation()}>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button onClick={() => setViewStudent(s)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.primary, padding: 4 }}><Eye size={14} /></button>
+                      <button onClick={() => setEditStudent(s)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.warning || '#f59e0b', padding: 4 }}><Edit2 size={14} /></button>
                       <button onClick={() => handleDelete(s.uuid)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.error, padding: 4 }}><Trash2 size={14} /></button>
                     </div>
                   </td>

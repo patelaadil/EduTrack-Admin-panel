@@ -1,16 +1,18 @@
 import { useState, useRef } from 'react'
-import { Plus, Trash2, Image, Info, AlertCircle } from 'lucide-react'
+import { Plus, Trash2, Edit2, Image, Info, AlertCircle, Check } from 'lucide-react'
 import { C } from '../constants/theme'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useSliders } from '../hooks/useData'
-import { Card, Btn } from '../components/UI'
+import { Card, Btn, Modal, Input } from '../components/UI'
 
 export default function SlidersPage() {
   const { profile }                          = useAuth()
   const { data: sliders, loading, refetch }  = useSliders()
   const [uploading, setUploading]            = useState(false)
   const [error, setError]                    = useState('')
+  const [editSlider, setEditSlider]          = useState(null)
+  const [saving, setSaving]                  = useState(false)
   const fileRef                              = useRef()
 
   async function handleToggle(id, current) {
@@ -22,6 +24,27 @@ export default function SlidersPage() {
     if (!window.confirm('Delete this slider?')) return
     await supabase.from('sliders').delete().eq('id', id)
     refetch()
+  }
+
+  async function handleUpdateSlider() {
+    if (!editSlider.title) return
+    setSaving(true)
+    setError('')
+
+    const { error: sErr } = await supabase.from('sliders').update({
+      title: editSlider.title,
+      order_index: parseInt(editSlider.order_index, 10) || 1
+    }).eq('id', editSlider.id)
+
+    if (sErr) {
+      setError(sErr.message)
+      setSaving(false)
+      return
+    }
+
+    refetch()
+    setEditSlider(null)
+    setSaving(false)
   }
 
   async function handleUpload(e) {
@@ -126,9 +149,14 @@ export default function SlidersPage() {
                   <input type="checkbox" checked={s.is_active} onChange={() => handleToggle(s.id, s.is_active)} style={{ accentColor: C.primary }} />
                   Active
                 </label>
-                <button onClick={() => handleDelete(s.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.error, padding: 4 }}>
-                  <Trash2 size={14} />
-                </button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={() => setEditSlider(s)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.warning || '#f59e0b', padding: 4 }}>
+                    <Edit2 size={14} />
+                  </button>
+                  <button onClick={() => handleDelete(s.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.error, padding: 4 }}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </Card>
             ))}
           </div>
@@ -153,6 +181,30 @@ export default function SlidersPage() {
       >
         {uploading ? 'Uploading...' : sliders.length >= 5 ? 'Max 5 Sliders Reached' : 'Add Slider (Upload Image)'}
       </Btn>
+
+      {/* Edit Modal */}
+      <Modal open={!!editSlider} onClose={() => { setEditSlider(null); setError('') }} title="Edit Slider">
+        {editSlider && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <Input label="Title" placeholder="Slider Title" value={editSlider.title || ''}
+              onChange={e => setEditSlider({...editSlider, title: e.target.value})} />
+            <Input label="Order/Position" type="number" placeholder="1" value={editSlider.order_index}
+              onChange={e => setEditSlider({...editSlider, order_index: e.target.value})} />
+            {error && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: `${C.error}10`, border: `1px solid ${C.error}30`, borderRadius: 9 }}>
+                <AlertCircle size={14} color={C.error} />
+                <span style={{ fontSize: 13, color: C.error }}>{error}</span>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+              <Btn variant="primary" style={{ flex: 1 }} icon={Check} onClick={handleUpdateSlider} disabled={saving}>
+                {saving ? 'Saving...' : 'Update Slider'}
+              </Btn>
+              <Btn variant="outline" onClick={() => { setEditSlider(null); setError('') }}>Cancel</Btn>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

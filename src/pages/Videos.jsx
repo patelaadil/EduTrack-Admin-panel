@@ -1,12 +1,41 @@
-import { Video, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import { Video, Trash2, Edit2, Check, AlertCircle } from 'lucide-react'
 import { C } from '../constants/theme'
 import { supabase } from '../lib/supabase'
 import { useVideos, useClasses } from '../hooks/useData'
-import { Card, Chip } from '../components/UI'
+import { Card, Chip, Modal, Input, Select, Btn } from '../components/UI'
 
 export default function VideosPage() {
   const { data: videos, loading, refetch } = useVideos()
   const { data: classes } = useClasses()
+  const [editVideo, setEditVideo] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleUpdateVideo() {
+    if (!editVideo.title || !editVideo.video_url) return
+    setSaving(true)
+    setError('')
+
+    const { error: vErr } = await supabase.from('videos').update({
+      title: editVideo.title,
+      description: editVideo.description || null,
+      video_url: editVideo.video_url,
+      thumbnail_url: editVideo.thumbnail_url || null,
+      subject: editVideo.subject || null,
+      class_id: editVideo.class_id || null,
+    }).eq('id', editVideo.id)
+
+    if (vErr) {
+      setError(vErr.message)
+      setSaving(false)
+      return
+    }
+
+    refetch()
+    setEditVideo(null)
+    setSaving(false)
+  }
 
   async function handleDelete(id) {
     if (!window.confirm('Delete this video?')) return
@@ -50,7 +79,8 @@ export default function VideosPage() {
                   {v.classes?.name && <Chip label={v.classes.name} color={C.orange} />}
                 </div>
                 <div style={{ fontSize: 11, color: C.textGray }}>{v.teachers?.profiles?.name} · {new Date(v.created_at).toLocaleDateString()}</div>
-                <div style={{ marginTop: 10 }}>
+                <div style={{ marginTop: 10, display: 'flex', gap: 6 }}>
+                  <button onClick={() => setEditVideo(v)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.warning || '#f59e0b', padding: 4 }}><Edit2 size={13} /></button>
                   <button onClick={() => handleDelete(v.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.error, padding: 4 }}><Trash2 size={13} /></button>
                 </div>
               </div>
@@ -58,6 +88,39 @@ export default function VideosPage() {
           ))}
         </div>
       )}
+
+      {/* Edit Modal */}
+      <Modal open={!!editVideo} onClose={() => { setEditVideo(null); setError('') }} title="Edit Video">
+        {editVideo && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <Input label="Title" placeholder="Video Title" value={editVideo.title || ''}
+              onChange={e => setEditVideo({...editVideo, title: e.target.value})} />
+            <Input label="Video URL" placeholder="https://..." value={editVideo.video_url || ''}
+              onChange={e => setEditVideo({...editVideo, video_url: e.target.value})} />
+            <Input label="Thumbnail URL (optional)" placeholder="https://..." value={editVideo.thumbnail_url || ''}
+              onChange={e => setEditVideo({...editVideo, thumbnail_url: e.target.value})} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <Input label="Subject" placeholder="Physics" value={editVideo.subject || ''}
+                onChange={e => setEditVideo({...editVideo, subject: e.target.value})} />
+              <Select label="Class" value={editVideo.class_id || ''}
+                onChange={e => setEditVideo({...editVideo, class_id: e.target.value})}
+                options={[{ value: '', label: 'Select class...' }, ...classes.map(c => ({ value: c.id, label: c.name }))]} />
+            </div>
+            {error && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: `${C.error}10`, border: `1px solid ${C.error}30`, borderRadius: 9 }}>
+                <AlertCircle size={14} color={C.error} />
+                <span style={{ fontSize: 13, color: C.error }}>{error}</span>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+              <Btn variant="primary" style={{ flex: 1 }} icon={Check} onClick={handleUpdateVideo} disabled={saving}>
+                {saving ? 'Saving...' : 'Update Video'}
+              </Btn>
+              <Btn variant="outline" onClick={() => { setEditVideo(null); setError('') }}>Cancel</Btn>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

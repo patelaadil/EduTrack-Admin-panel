@@ -10,31 +10,56 @@ export function AuthProvider({ children }) {
 
   // Fetch profile row from our profiles table
   async function fetchProfile(userId) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .single()
+    if (error) throw error
     setProfile(data)
+    return data
   }
 
   useEffect(() => {
-    // Get current session on mount
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user.id)
-      setLoading(false)
-    })
+    let mounted = true
+    let fallbackTimer
+
+    const syncAuth = async (session) => {
+      if (!mounted) return
+      setLoading(true)
+      try {
+        setUser(session?.user ?? null)
+        if (session?.user) {
+          await fetchProfile(session.user.id)
+        } else {
+          setProfile(null)
+        }
+      } catch (_) {
+        setProfile(null)
+        setUser(session?.user ?? null)
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    }
+
+    // Guard against a hanging auth/profile bootstrap.
+    fallbackTimer = setTimeout(() => {
+      if (mounted) setLoading(false)
+    }, 8000)
+
+    // Get current session on mount and wait for the profile so role checks are accurate.
+    supabase.auth.getSession().then(({ data: { session } }) => syncAuth(session))
 
     // Listen for login/logout changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user.id)
-      else setProfile(null)
-      setLoading(false)
+      syncAuth(session)
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      mounted = false
+      clearTimeout(fallbackTimer)
+      subscription.unsubscribe()
+    }
   }, [])
 
   async function signIn(email, password) {

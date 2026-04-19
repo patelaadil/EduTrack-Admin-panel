@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Search, Plus, Trash2, Check, Video, BarChart2, FileText, AlertCircle } from 'lucide-react'
+import { Search, Plus, Trash2, Check, Video, BarChart2, Edit2, AlertCircle } from 'lucide-react'
 import { C } from '../constants/theme'
 import { supabase, SUPABASE_ANON_KEY } from '../lib/supabase'
 import { useTeachers, useClasses } from '../hooks/useData'
@@ -10,11 +10,12 @@ export default function TeachersPage() {
   const { data: classes } = useClasses()
   const [showAdd, setShowAdd] = useState(false)
   const [saving, setSaving]   = useState(false)
-  const [error, setError]     = useState('')
-  const [search, setSearch]   = useState('')
+  const [error, setError]         = useState('')
+  const [search, setSearch]       = useState('')
+  const [editTeacher, setEditTeacher] = useState(null)
   const [form, setForm] = useState({
     name: '', email: '', phone: '', class_id: '',
-    can_add_videos: true, can_add_marks: true, can_add_reports: true
+    can_add_videos: true, can_add_marks: true
   })
 
   const filtered = teachers.filter(t =>
@@ -37,7 +38,6 @@ export default function TeachersPage() {
         class_id: form.class_id || null,
         can_add_videos: form.can_add_videos,
         can_add_marks: form.can_add_marks,
-        can_add_reports: form.can_add_reports,
       },
       headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
     })
@@ -50,7 +50,43 @@ export default function TeachersPage() {
 
     refetch()
     setShowAdd(false)
-    setForm({ name: '', email: '', phone: '', class_id: '', can_add_videos: true, can_add_marks: true, can_add_reports: true })
+    setForm({ name: '', email: '', phone: '', class_id: '', can_add_videos: true, can_add_marks: true })
+    setSaving(false)
+  }
+
+  async function handleUpdateTeacher() {
+    if (!editTeacher.profiles?.name) return
+    setSaving(true)
+    setError('')
+
+    // Update teachers table
+    const { error: tErr } = await supabase.from('teachers').update({
+      can_add_videos: editTeacher.can_add_videos,
+      can_add_marks: editTeacher.can_add_marks,
+    }).eq('id', editTeacher.id)
+
+    if (tErr) {
+      setError(tErr.message)
+      setSaving(false)
+      return
+    }
+
+    // Update profiles table
+    if (editTeacher.profiles?.id) {
+      const { error: pErr } = await supabase.from('profiles').update({
+        name: editTeacher.profiles.name,
+        phone: editTeacher.profiles.phone || null,
+      }).eq('id', editTeacher.profiles.id)
+
+      if (pErr) {
+        setError(pErr.message)
+        setSaving(false)
+        return
+      }
+    }
+
+    refetch()
+    setEditTeacher(null)
     setSaving(false)
   }
 
@@ -78,7 +114,7 @@ export default function TeachersPage() {
           <div>
             <label style={{ fontSize: 13, fontWeight: 600, color: C.textGray, display: 'block', marginBottom: 10 }}>Permissions</label>
             <div style={{ display: 'flex', gap: 16 }}>
-              {[['can_add_videos','Can Add Videos'], ['can_add_marks','Can Add Marks'], ['can_add_reports','Can Add Reports']].map(([key, label]) => (
+              {[['can_add_videos','Can Add Videos'], ['can_add_marks','Can Add Marks']].map(([key, label]) => (
                 <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.textDark, cursor: 'pointer' }}>
                   <input type="checkbox" checked={form[key]}
                     onChange={e => setForm({...form, [key]: e.target.checked})}
@@ -105,6 +141,48 @@ export default function TeachersPage() {
             <Btn variant="outline" onClick={() => { setShowAdd(false); setError('') }}>Cancel</Btn>
           </div>
         </div>
+      </Modal>
+
+      {/* Edit Modal */}
+      <Modal open={!!editTeacher} onClose={() => { setEditTeacher(null); setError('') }} title="Edit Teacher">
+        {editTeacher && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <Input label="Full Name" placeholder="Teacher name" value={editTeacher.profiles?.name || ''}
+              onChange={e => setEditTeacher({...editTeacher, profiles: {...editTeacher.profiles, name: e.target.value}})} />
+            <Input label="Phone Number" placeholder="+91 XXXXX XXXXX" value={editTeacher.profiles?.phone || ''}
+              onChange={e => setEditTeacher({...editTeacher, profiles: {...editTeacher.profiles, phone: e.target.value}})} />
+            
+            <div style={{ padding: '12px 14px', background: C.card, borderRadius: 10 }}>
+               <div style={{ fontSize: 13, color: C.textDark }}>Email: <strong>{editTeacher.profiles?.email}</strong></div>
+               <div style={{ fontSize: 11, color: C.textGray, marginTop: 4 }}>Emails cannot be changed here.</div>
+            </div>
+
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 600, color: C.textGray, display: 'block', marginBottom: 10 }}>Permissions</label>
+              <div style={{ display: 'flex', gap: 16 }}>
+                {[['can_add_videos','Can Add Videos'], ['can_add_marks','Can Add Marks']].map(([key, label]) => (
+                  <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.textDark, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={editTeacher[key]}
+                      onChange={e => setEditTeacher({...editTeacher, [key]: e.target.checked})}
+                      style={{ accentColor: C.primary }} /> {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            {error && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: `${C.error}10`, border: `1px solid ${C.error}30`, borderRadius: 9 }}>
+                <AlertCircle size={14} color={C.error} />
+                <span style={{ fontSize: 13, color: C.error }}>{error}</span>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+              <Btn variant="primary" style={{ flex: 1 }} icon={Check} onClick={handleUpdateTeacher} disabled={saving}>
+                {saving ? 'Saving...' : 'Update Teacher'}
+              </Btn>
+              <Btn variant="outline" onClick={() => { setEditTeacher(null); setError('') }}>Cancel</Btn>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <Card style={{ marginBottom: 16, padding: '14px 20px' }}>
@@ -152,7 +230,6 @@ export default function TeachersPage() {
                     <div style={{ display: 'flex', gap: 6 }}>
                       <Video size={13} color={t.can_add_videos ? C.success : C.border} />
                       <BarChart2 size={13} color={t.can_add_marks ? C.success : C.border} />
-                      <FileText size={13} color={t.can_add_reports ? C.success : C.border} />
                     </div>
                   </td>
                   <td style={{ padding: '12px 16px' }}>
@@ -160,10 +237,10 @@ export default function TeachersPage() {
                       color={t.profiles?.is_active ? C.success : C.textGray} />
                   </td>
                   <td style={{ padding: '12px 16px' }}>
-                    <button onClick={() => handleDelete(t.id)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.error, padding: 4 }}>
-                      <Trash2 size={14} />
-                    </button>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => setEditTeacher(t)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.warning || '#f59e0b', padding: 4 }}><Edit2 size={14} /></button>
+                      <button onClick={() => handleDelete(t.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.error, padding: 4 }}><Trash2 size={14} /></button>
+                    </div>
                   </td>
                 </tr>
               ))}

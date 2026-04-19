@@ -19,11 +19,13 @@ export default function NotificationsPage() {
 
   async function handleSend() {
     if (!title || !message) return
+    if (target === 'class' && !classId) return
     setSending(true)
     await supabase.from('notifications').insert({
       title, body: message,
       sent_by: profile?.id,
       target_type: target,
+      class_id: target === 'class' ? classId : null,
     })
     setSent(true)
     setTitle('')

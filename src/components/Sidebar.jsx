@@ -1,12 +1,12 @@
 import {
   LayoutDashboard, Users, GraduationCap, School, CheckSquare,
-  BarChart2, Video, Image, Bell, Info, Settings, LogOut, Menu,
+  BarChart2, Video, Image, Bell, Info, Settings, LogOut, Menu, Calendar,
 } from 'lucide-react'
 import { C } from '../constants/theme'
 
 const iconMap = {
   LayoutDashboard, Users, GraduationCap, School, CheckSquare,
-  BarChart2, Video, Image, Bell, Info, Settings,
+  BarChart2, Video, Image, Bell, Info, Settings, Calendar,
 }
 
 const navItems = [
@@ -17,8 +17,9 @@ const navItems = [
   { key: 'classes',       label: 'Classes',           icon: 'School' },
   { section: 'Attendance' },
   { key: 'attendance',    label: 'Attendance',        icon: 'CheckSquare' },
+  { key: 'holidays',      label: 'Holidays',          icon: 'Calendar' },
   { section: 'Content' },
-  { key: 'marks',         label: 'Marks & Reports',   icon: 'BarChart2' },
+  { key: 'marks',         label: 'Marks',             icon: 'BarChart2' },
   { key: 'videos',        label: 'Videos',            icon: 'Video' },
   { key: 'sliders',       label: 'Slider Management', icon: 'Image' },
   { section: 'Communication' },
@@ -70,7 +71,7 @@ export default function Sidebar({ active, setActive, collapsed, setCollapsed, on
       </button>
 
       {/* Logout */}
-      <button onClick={onLogout}
+      <button onClick={() => { if(window.confirm('Are you sure you want to logout?')) onLogout() }}
         style={{ padding: collapsed ? '14px 16px' : '14px 20px', display: 'flex', alignItems: 'center', gap: 10, color: 'rgba(239,68,68,0.7)', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
         <LogOut size={15} />
         {!collapsed && <span>Logout</span>}

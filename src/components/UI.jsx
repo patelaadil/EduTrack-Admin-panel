@@ -22,13 +22,14 @@ export const Card = ({ children, style = {}, className = "" }) => (
   <div style={{ background: C.card, borderRadius: 14, boxShadow: "0 1px 3px rgba(0,0,0,0.07), 0 1px 8px rgba(0,0,0,0.04)", padding: 24, ...style }}>{children}</div>
 );
 
-export const Input = ({ label, icon: Icon, type = "text", placeholder, value, onChange, style = {} }) => (
+export const Input = ({ label, icon: Icon, type = "text", placeholder, value, onChange, style = {}, ...props }) => (
   <div style={{ display: "flex", flexDirection: "column", gap: 6, ...style }}>
     {label && <label style={{ fontSize: 13, fontWeight: 600, color: C.textGray }}>{label}</label>}
     <div style={{ position: "relative" }}>
       {Icon && <Icon size={15} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: C.textLight }} />}
       <input type={type} placeholder={placeholder} value={value} onChange={onChange}
-        style={{ width: "100%", padding: Icon ? "9px 12px 9px 36px" : "9px 12px", border: `1.5px solid ${C.border}`, borderRadius: 9, fontSize: 13, color: C.textDark, outline: "none", background: "#F8FAFC", boxSizing: "border-box", fontFamily: "inherit" }} />
+        style={{ width: "100%", padding: Icon ? "9px 12px 9px 36px" : "9px 12px", border: `1.5px solid ${C.border}`, borderRadius: 9, fontSize: 13, color: C.textDark, outline: "none", background: "#F8FAFC", boxSizing: "border-box", fontFamily: "inherit" }}
+        {...props} />
     </div>
   </div>
 );

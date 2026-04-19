@@ -9,6 +9,7 @@ export function useSupabase(table, options = {}) {
 
   async function fetch() {
     setLoading(true)
+    setError(null)
     let query = supabase.from(table).select(options.select || '*')
     if (options.filter)  query = query.eq(options.filter.col, options.filter.val)
     if (options.order)   query = query.order(options.order, { ascending: options.asc ?? false })

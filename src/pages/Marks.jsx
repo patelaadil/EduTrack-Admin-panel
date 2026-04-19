@@ -1,30 +1,24 @@
 import { useState } from 'react'
-import { Edit2, Trash2, Download, FileText, Plus, Check } from 'lucide-react'
+import { Edit2, Trash2, Download, Plus, Check } from 'lucide-react'
 import { C } from '../constants/theme'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
-import { useMarks, useReports, useStudents, useClasses, useTeachers } from '../hooks/useData'
+import { useMarks, useStudents, useClasses, useTeachers } from '../hooks/useData'
 import { Card, Avatar, Badge, Chip, Input, Select, Btn, Modal } from '../components/UI'
 
 export default function MarksPage() {
   const { profile } = useAuth()
   const { data: marks,   loading: marksLoading,   refetch: refetchMarks   } = useMarks()
-  const { data: reports, loading: reportsLoading, refetch: refetchReports } = useReports()
   const { data: students } = useStudents()
   const { data: classes }  = useClasses()
   const { data: teachers } = useTeachers()
 
-  const [tab, setTab]         = useState('marks')
-  const [showAddMark, setShowAddMark]     = useState(false)
-  const [showAddReport, setShowAddReport] = useState(false)
-  const [saving, setSaving]   = useState(false)
+  const [saving, setSaving]     = useState(false)
+  const [showAddMark, setShowAddMark] = useState(false)
 
   const [markForm, setMarkForm] = useState({
     student_uuid: '', class_id: '', subject: '',
     exam_type: 'midterm', marks_obtained: '', total_marks: '', grade: ''
-  })
-  const [reportForm, setReportForm] = useState({
-    student_uuid: '', class_id: '', title: '', file: null
   })
 
   // ── Add Mark ──────────────────────────────────────────────
@@ -57,43 +51,6 @@ export default function MarksPage() {
     if (!window.confirm('Delete this mark entry?')) return
     await supabase.from('marks').delete().eq('id', id)
     refetchMarks()
-  }
-
-  // ── Add Report (PDF upload) ───────────────────────────────
-  async function handleAddReport() {
-    if (!reportForm.title || !reportForm.file) return
-    setSaving(true)
-
-    const fileName = `${Date.now()}_${reportForm.file.name}`
-    const { data: uploadData } = await supabase.storage
-      .from('reports')
-      .upload(fileName, reportForm.file)
-
-    if (uploadData) {
-      const { data: urlData } = supabase.storage.from('reports').getPublicUrl(fileName)
-      const { data: teacherRow } = await supabase
-        .from('teachers').select('id').eq('profile_id', profile?.id).single()
-      const activeYear = await supabase.from('academic_years').select('id').eq('is_active', true).single()
-
-      await supabase.from('reports').insert({
-        student_uuid:    reportForm.student_uuid || null,
-        class_id:        reportForm.class_id || null,
-        teacher_id:      teacherRow?.id || null,
-        title:           reportForm.title,
-        file_url:        urlData.publicUrl,
-        academic_year_id: activeYear.data?.id || null,
-      })
-      refetchReports()
-      setShowAddReport(false)
-      setReportForm({ student_uuid: '', class_id: '', title: '', file: null })
-    }
-    setSaving(false)
-  }
-
-  async function handleDeleteReport(id) {
-    if (!window.confirm('Delete this report?')) return
-    await supabase.from('reports').delete().eq('id', id)
-    refetchReports()
   }
 
   return (
@@ -131,40 +88,7 @@ export default function MarksPage() {
         </div>
       </Modal>
 
-      {/* Add Report Modal */}
-      <Modal open={showAddReport} onClose={() => setShowAddReport(false)} title="Upload Report">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <Input label="Report Title" placeholder="e.g. Term 1 Report Card — Class 10-A" value={reportForm.title} onChange={e => setReportForm({...reportForm, title: e.target.value})} />
-          <Select label="Class (optional)" value={reportForm.class_id} onChange={e => setReportForm({...reportForm, class_id: e.target.value})}
-            options={[{ value: '', label: 'Select class...' }, ...classes.map(c => ({ value: c.id, label: c.name }))]} />
-          <Select label="Student (optional)" value={reportForm.student_uuid} onChange={e => setReportForm({...reportForm, student_uuid: e.target.value})}
-            options={[{ value: '', label: 'All students (class report)' }, ...students.map(s => ({ value: s.uuid, label: s.profiles?.name }))]} />
-          <div>
-            <label style={{ fontSize: 13, fontWeight: 600, color: C.textGray, display: 'block', marginBottom: 6 }}>PDF File</label>
-            <input type="file" accept=".pdf"
-              onChange={e => setReportForm({...reportForm, file: e.target.files[0]})}
-              style={{ fontSize: 13, color: C.textDark }} />
-          </div>
-          <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-            <Btn variant="primary" style={{ flex: 1 }} icon={Check} onClick={handleAddReport} disabled={saving || !reportForm.file}>{saving ? 'Uploading...' : 'Upload Report'}</Btn>
-            <Btn variant="outline" onClick={() => setShowAddReport(false)}>Cancel</Btn>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        {['marks', 'reports'].map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            style={{ padding: '8px 20px', borderRadius: 9, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', background: tab === t ? C.primary : C.card, color: tab === t ? '#fff' : C.textGray, fontFamily: 'inherit', boxShadow: tab === t ? `0 2px 8px ${C.primary}40` : 'none' }}>
-            {t === 'marks' ? '📝 Marks' : '📄 Reports'}
-          </button>
-        ))}
-      </div>
-
-      {/* ── MARKS TAB ── */}
-      {tab === 'marks' && (
-        <Card style={{ padding: 0 }}>
+      <Card style={{ padding: 0 }}>
           <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', gap: 10, alignItems: 'center' }}>
             <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.textDark }}>All Marks</h3>
             <div style={{ flex: 1 }} />
@@ -217,43 +141,6 @@ export default function MarksPage() {
             </table>
           )}
         </Card>
-      )}
-
-      {/* ── REPORTS TAB ── */}
-      {tab === 'reports' && (
-        <div>
-          <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'flex-end' }}>
-            <Btn icon={Plus} variant="primary" onClick={() => setShowAddReport(true)}>Upload Report</Btn>
-          </div>
-
-          {reportsLoading
-            ? <div style={{ padding: 40, textAlign: 'center', color: C.textGray }}>Loading reports...</div>
-            : reports.length === 0
-              ? <Card><p style={{ fontSize: 13, color: C.textGray, margin: 0 }}>No reports uploaded yet.</p></Card>
-              : reports.map(r => (
-                <Card key={r.id} style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 10, background: `${C.error}10`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <FileText size={18} color={C.error} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: C.textDark }}>{r.title}</div>
-                    <div style={{ fontSize: 12, color: C.textGray, marginTop: 2 }}>
-                      {r.teachers?.profiles?.name || 'Unknown'} · {new Date(r.created_at).toLocaleDateString()}
-                      {r.classes?.name && ` · ${r.classes.name}`}
-                      {r.students?.profiles?.name && ` · ${r.students.profiles.name}`}
-                    </div>
-                  </div>
-                  {r.file_url && (
-                    <a href={r.file_url} target="_blank" rel="noreferrer">
-                      <Btn icon={Download} variant="outline" style={{ padding: '6px 12px' }}>Download</Btn>
-                    </a>
-                  )}
-                  <button onClick={() => handleDeleteReport(r.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.error, padding: 4 }}><Trash2 size={14} /></button>
-                </Card>
-              ))
-          }
-        </div>
-      )}
     </div>
   )
 }

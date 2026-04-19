@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CheckSquare, Mail, Lock, AlertCircle } from 'lucide-react'
 import { C } from '../constants/theme'
+import { supabase } from '../lib/supabase'
 import { Input } from '../components/UI'
 import { useAuth } from '../context/AuthContext'
 
@@ -14,9 +15,48 @@ export default function LoginPage({ onLogin }) {
   async function handleLogin() {
     if (!email || !password) { setError('Please enter email and password.'); return }
     setLoading(true); setError('')
-    const { error } = await signIn(email, password)
-    if (error) { setError(error.message); setLoading(false) }
-    else onLogin()
+    const { data, error } = await signIn(email, password)
+    if (error) {
+      setError(error.message)
+      setLoading(false)
+      return
+    }
+
+    const user = data.user
+    if (!user) {
+      setError('Login failed. Please try again.')
+      setLoading(false)
+      return
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role, is_active')
+      .eq('id', user.id)
+      .single()
+
+    if (profileError) {
+      setError(profileError.message)
+      await supabase.auth.signOut()
+      setLoading(false)
+      return
+    }
+
+    if (profile?.is_active === false) {
+      setError('Account inactive. Contact your school admin.')
+      await supabase.auth.signOut()
+      setLoading(false)
+      return
+    }
+
+    if (profile?.role !== 'admin') {
+      setError('This panel is for admin users only.')
+      await supabase.auth.signOut()
+      setLoading(false)
+      return
+    }
+
+    onLogin()
   }
 
   return (
